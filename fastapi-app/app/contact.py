@@ -4,6 +4,12 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 import time
 
+# === CONFIGURATION ===
+FILL_DELAY = 0.7  # seconds to wait after filling each field
+PAGE_LOAD_DELAY = 2.5  # seconds to wait after loading a contact page
+SUBMIT_DELAY = 2  # seconds to wait after clicking submit
+SWAP_DELAY = 0.5  # seconds to wait between sites
+
 # === FIND CONTACT PAGE ===
 def find_contact_url(base_url):
     try:
@@ -30,7 +36,7 @@ def fill_contact_form(contact_url, form_data):
     try:
         driver = webdriver.Chrome()
         driver.get(contact_url)
-        time.sleep(3)
+        time.sleep(PAGE_LOAD_DELAY)
 
         # Find all forms, skip those with class/id containing 'sidebar' or 'popup'
         forms = driver.find_elements(By.TAG_NAME, "form")
@@ -48,56 +54,77 @@ def fill_contact_form(contact_url, form_data):
             if not value:
                 return False
             for form in main_forms:
-                # Try by name, id, placeholder (contains, not just equals)
+                # Try by name, id, placeholder (contains, not just equals), but ignore search fields
                 for name in possible_names:
-                    # By name contains
+                    # By name contains, but ignore search fields
                     try:
-                        el = form.find_element(By.XPATH, f".//input[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}') and not(contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search'))]" )
                         if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
+                            time.sleep(FILL_DELAY)
                             return True
                     except Exception:
                         pass
-                    # By id contains
+                    # By id contains, but ignore search fields
                     try:
-                        el = form.find_element(By.XPATH, f".//input[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}') and not(contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search'))]" )
                         if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
+                            time.sleep(FILL_DELAY)
                             return True
                     except Exception:
                         pass
-                    # By placeholder contains
+                    # By placeholder contains, but ignore search fields
                     try:
-                        el = form.find_element(By.XPATH, f".//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}') and not(contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search'))]" )
                         if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
+                            time.sleep(FILL_DELAY)
                             return True
                     except Exception:
                         pass
-                # Try for astralpipes: fill by partial match for 'mobile' and 'pincode' in any attribute
+                # Try to match placeholder exactly to user field name (case-insensitive, ignore search fields)
+                try:
+                    inputs = form.find_elements(By.XPATH, ".//input")
+                    for el in inputs:
+                        placeholder = (el.get_attribute('placeholder') or '').strip().lower()
+                        if placeholder and not 'search' in placeholder:
+                            for user_field in form_data:
+                                # If the placeholder contains the user field name, or for email, if it contains 'email' anywhere (e.g. 'signup with email')
+                                if (user_field in placeholder or (user_field == 'email' and 'email' in placeholder)) and form_data[user_field]:
+                                    if el.is_displayed() and not el.get_attribute('value'):
+                                        el.clear()
+                                        el.send_keys(form_data[user_field])
+                                        time.sleep(FILL_DELAY)
+                                        return True
+                except Exception:
+                    pass
+                # Try for partial match in any attribute, but ignore search fields
                 try:
                     if value:
                         inputs = form.find_elements(By.XPATH, ".//input")
                         for el in inputs:
                             attrs = [el.get_attribute('name') or '', el.get_attribute('id') or '', el.get_attribute('placeholder') or '']
                             attrs = [a.lower() for a in attrs]
-                            if any(n in a for n in possible_names for a in attrs):
+                            if any(n in a for n in possible_names for a in attrs) and not any('search' in a for a in attrs):
                                 if el.is_displayed() and not el.get_attribute('value'):
                                     el.clear()
                                     el.send_keys(value)
+                                    time.sleep(FILL_DELAY)
                                     return True
                 except Exception:
                     pass
-                # Try textarea
+                # Try textarea (no search bar issue for textarea)
                 for name in possible_names:
                     try:
                         el = form.find_element(By.XPATH, f".//textarea[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
                         if not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
+                            time.sleep(FILL_DELAY)
                             return True
                     except Exception:
                         pass
@@ -106,6 +133,7 @@ def fill_contact_form(contact_url, form_data):
                         if not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
+                            time.sleep(FILL_DELAY)
                             return True
                     except Exception:
                         pass
@@ -114,27 +142,29 @@ def fill_contact_form(contact_url, form_data):
                         if not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
+                            time.sleep(FILL_DELAY)
                             return True
                     except Exception:
                         pass
-                # As a last resort, try to fill any empty visible text input in main form
+                # As a last resort, try to fill any empty visible text input in main form, but ignore search fields
                 try:
                     if value:
                         inputs = form.find_elements(By.XPATH, ".//input[@type='text' or @type='email' or @type='tel' or @type='number' or @type='password']")
                         for el in inputs:
-                            if el.is_displayed() and not el.get_attribute('value'):
+                            attrs = [el.get_attribute('name') or '', el.get_attribute('id') or '', el.get_attribute('placeholder') or '']
+                            attrs = [a.lower() for a in attrs]
+                            if el.is_displayed() and not el.get_attribute('value') and not any('search' in a for a in attrs):
                                 el.clear()
                                 el.send_keys(value)
+                                time.sleep(FILL_DELAY)
                                 return True
                 except Exception:
                     pass
             return False
 
-        # Try to fill name
+        # Use all collected user info for relevant fields
         find_and_fill(["name", "your-name", "fullname", "full_name", "contactname", "contact_name"], form_data["name"])
-        # Try to fill email
-        find_and_fill(["email", "your-email", "mail", "contactemail", "contact_email","contact[email]"], form_data["email"])
-        # Try to fill message/comment
+        find_and_fill(["email", "your-email", "mail", "contactemail", "contact_email", "contact[email]"], form_data["email"])
         filled_message = find_and_fill(["message", "comment", "your-message", "enquiry", "query", "description", "body", "content"], form_data["message"])
         if not filled_message:
             try:
@@ -143,20 +173,15 @@ def fill_contact_form(contact_url, form_data):
                     if not el.get_attribute('value'):
                         el.clear()
                         el.send_keys(form_data["message"])
+                        time.sleep(FILL_DELAY)
                         break
             except Exception:
                 pass
-        # Try to fill phone/mobile
         find_and_fill(["phone", "mobile", "contactphone", "contact_phone", "phonenumber", "phone_number", "txtmobile"], form_data.get("phone", ""))
-        # Try to fill country
         find_and_fill(["country", "your-country", "contactcountry", "contact_country"], form_data.get("country", ""))
-        # Try to fill city
         find_and_fill(["city", "your-city", "contactcity", "contact_city", "txtcity"], form_data.get("city", ""))
-        # Try to fill state
         find_and_fill(["state", "your-state", "contactstate", "contact_state"], form_data.get("state", ""))
-        # Try to fill pincode
         find_and_fill(["pincode", "pin", "zipcode", "zip", "postal", "postalcode", "postal_code", "txtpincode"], form_data.get("pincode", ""))
-        # Try to fill subject
         find_and_fill(["subject", "your-subject", "contactsubject", "contact_subject", "enquiry_subject", "txtsubject"], form_data.get("subject", ""))
 
         # Try to handle 'I am not a robot' checkboxes (basic reCAPTCHA v2)
@@ -184,14 +209,15 @@ def fill_contact_form(contact_url, form_data):
         try:
             for form in main_forms:
                 try:
-                    submit_button = form.find_element(By.XPATH, ".//input[@type='submit'] | .//button[@type='submit'] | .//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'send')]")
+                    submit_button = form.find_element(By.XPATH, ".//input[@type='submit'] | .//button[@type='submit'] | .//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'send')] | .//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'send message')] | .//button[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'send')] | .//button[contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'send')]")
                     submit_button.click()
-                    time.sleep(5)
+                    time.sleep(SUBMIT_DELAY)
                     break
                 except Exception:
                     continue
         except Exception:
-            driver.quit()
+            if driver is not None:
+                driver.quit()
             return False
 
         # After submission, check for success indicators
@@ -208,3 +234,38 @@ def fill_contact_form(contact_url, form_data):
         return is_success
     except Exception:
         return False
+
+websites = [
+    # ...existing code...
+]
+
+form_data = {
+    # ...existing code...
+}
+
+success_list = []
+contact_not_found = []
+
+for site in websites:
+    print(f"\nChecking site: {site}")
+    contact_url = find_contact_url(site)
+    if contact_url:
+        print(f"Found contact page: {contact_url}")
+        result = fill_contact_form(contact_url, form_data)
+        if result:
+            print("✔️  Form submitted successfully.")
+            success_list.append(site)
+        else:
+            print("Website didnt have form")
+            contact_not_found.append(site)
+    else:
+        print("No contact page found.")
+        contact_not_found.append(site)
+    time.sleep(SWAP_DELAY)
+
+# === RESULT ===
+success_rate = (len(success_list) / len(websites)) * 100 if websites else 0
+print("\n=== SUMMARY ===")
+print("✅ Success:", success_list)
+print("❌ Form Not Found:", contact_not_found)
+print(f"📊 Success Rate: {success_rate:.2f}%")

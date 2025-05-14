@@ -6,9 +6,18 @@ import time
 
 # === CONFIGURATION ===
 websites = [
-    "https://snackible.com/",
-    "https://www.anandsweets.in/",
-    "https://www.realnamkeen"
+    "https://freakins.com",
+    "https://brillare.co.in",
+    "https://dermalogica.in",
+    "https://atmiyasurgical.com",
+    "https://wishingoats.com",
+    "https://maajisafashion.com",
+    "https://beardo.in",
+    "https://blackpoisontattoos.com",
+    "https://indianclothstore.com",
+    "https://yatradham.org",
+    "https://outdoors91.com",
+    "https://reneecosmetics.in"
     # Add more websites here
 ]
 
