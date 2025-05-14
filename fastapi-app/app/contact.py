@@ -50,27 +50,27 @@ def fill_contact_form(contact_url, form_data):
             for form in main_forms:
                 # Try by name, id, placeholder (contains, not just equals)
                 for name in possible_names:
-                    # By name contains
+                    # By name contains, but ignore search fields
                     try:
-                        el = form.find_element(By.XPATH, f".//input[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}') and not(contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search'))]" )
                         if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
                             return True
                     except Exception:
                         pass
-                    # By id contains
+                    # By id contains, but ignore search fields
                     try:
-                        el = form.find_element(By.XPATH, f".//input[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}') and not(contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search'))]" )
                         if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
                             return True
                     except Exception:
                         pass
-                    # By placeholder contains
+                    # By placeholder contains, but ignore search fields
                     try:
-                        el = form.find_element(By.XPATH, f".//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}') and not(contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search'))]" )
                         if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
