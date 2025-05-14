@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Form Submission</title>
+</head>
+<body>
+    <h1>Contact Form Submission</h1>
+    <form action="/" method="post">
+    <label for="websites">Websites (one per line):</label><br>
+    <textarea id="websites" name="websites" rows="5" cols="50" required>{{ websites|default('') }}</textarea><br><br>
+
+    <label for="name">Name:</label>
+    <input type="text" id="name" name="name" value="{{ name|default('') }}" required><br><br>
+    
+    <label for="email">Email:</label>
+    <input type="email" id="email" name="email" value="{{ email|default('') }}" required><br><br>
+    
+    <label for="message">Message:</label>
+    <textarea id="message" name="message" required>{{ message|default('') }}</textarea><br><br>
+
+    <label for="phone">Phone:</label>
+    <input type="text" id="phone" name="phone" value="{{ phone|default('') }}"><br><br>
+
+    <label for="country">Country:</label>
+    <input type="text" id="country" name="country" value="{{ country|default('') }}"><br><br>
+
+    <label for="city">City:</label>
+    <input type="text" id="city" name="city" value="{{ city|default('') }}"><br><br>
+
+    <label for="state">State:</label>
+    <input type="text" id="state" name="state" value="{{ state|default('') }}"><br><br>
+
+    <label for="pincode">Pincode:</label>
+    <input type="text" id="pincode" name="pincode" value="{{ pincode|default('') }}"><br><br>
+    
+    <input type="submit" value="Submit">
+</form>
+
+    {% if success_list %}
+        <h2>✅ Success:</h2>
+        <ul>
+            {% for site in success_list %}
+                <li>{{ site }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if contact_not_found %}
+        <h2>❌ Form Not Found:</h2>
+        <ul>
+            {% for site in contact_not_found %}
+                <li>{{ site }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    {% if success_rate is not none %}
+        <h2>📊 Success Rate: {{ success_rate }}%</h2>
+    {% endif %}
+</body>
+</html>
