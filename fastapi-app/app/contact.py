@@ -40,7 +40,7 @@ def fill_contact_form(contact_url, form_data):
                 # By name contains
                 try:
                     el = driver.find_element(By.XPATH, f"//input[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
-                    if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number'] and not el.get_attribute('value'):
+                    if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                         el.clear()
                         el.send_keys(value)
                         return True
@@ -49,7 +49,7 @@ def fill_contact_form(contact_url, form_data):
                 # By id contains
                 try:
                     el = driver.find_element(By.XPATH, f"//input[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
-                    if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number'] and not el.get_attribute('value'):
+                    if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                         el.clear()
                         el.send_keys(value)
                         return True
@@ -58,12 +58,26 @@ def fill_contact_form(contact_url, form_data):
                 # By placeholder contains
                 try:
                     el = driver.find_element(By.XPATH, f"//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
-                    if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number'] and not el.get_attribute('value'):
+                    if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                         el.clear()
                         el.send_keys(value)
                         return True
                 except Exception:
                     pass
+            # Try for astralpipes: fill by partial match for 'mobile' and 'pincode' in any attribute
+            try:
+                if value:
+                    inputs = driver.find_elements(By.XPATH, "//input")
+                    for el in inputs:
+                        attrs = [el.get_attribute('name') or '', el.get_attribute('id') or '', el.get_attribute('placeholder') or '']
+                        attrs = [a.lower() for a in attrs]
+                        if any(n in a for n in possible_names for a in attrs):
+                            if el.is_displayed() and not el.get_attribute('value'):
+                                el.clear()
+                                el.send_keys(value)
+                                return True
+            except Exception:
+                pass
             # Try textarea
             for name in possible_names:
                 try:
@@ -93,7 +107,7 @@ def fill_contact_form(contact_url, form_data):
             # As a last resort, try to fill any empty visible text input
             try:
                 if value:
-                    inputs = driver.find_elements(By.XPATH, "//input[@type='text' or @type='email' or @type='tel' or @type='number']")
+                    inputs = driver.find_elements(By.XPATH, "//input[@type='text' or @type='email' or @type='tel' or @type='number' or @type='password']")
                     for el in inputs:
                         if el.is_displayed() and not el.get_attribute('value'):
                             el.clear()
@@ -117,16 +131,16 @@ def fill_contact_form(contact_url, form_data):
                     el.send_keys(form_data["message"])
             except Exception:
                 pass
-        # Try to fill phone
-        find_and_fill(["phone", "mobile", "contactphone", "contact_phone", "phonenumber", "phone_number"], form_data.get("phone", ""))
+        # Try to fill phone/mobile
+        find_and_fill(["phone", "mobile", "contactphone", "contact_phone", "phonenumber", "phone_number", "txtmobile"], form_data.get("phone", ""))
         # Try to fill country
         find_and_fill(["country", "your-country", "contactcountry", "contact_country"], form_data.get("country", ""))
         # Try to fill city
-        find_and_fill(["city", "your-city", "contactcity", "contact_city"], form_data.get("city", ""))
+        find_and_fill(["city", "your-city", "contactcity", "contact_city", "txtcity"], form_data.get("city", ""))
         # Try to fill state
         find_and_fill(["state", "your-state", "contactstate", "contact_state"], form_data.get("state", ""))
         # Try to fill pincode
-        find_and_fill(["pincode", "pin", "zipcode", "zip", "postal", "postalcode", "postal_code"], form_data.get("pincode", ""))
+        find_and_fill(["pincode", "pin", "zipcode", "zip", "postal", "postalcode", "postal_code", "txtpincode"], form_data.get("pincode", ""))
 
         # Try clicking the submit button (input or button with type submit or text 'send')
         try:
