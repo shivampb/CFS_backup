@@ -36,6 +36,7 @@ async def main_form(request: Request):
     city = form.get("city", "")
     state = form.get("state", "")
     pincode = form.get("pincode", "")
+    subject = form.get("subject", "")
     websites_list = [w.strip() for w in websites.splitlines() if w.strip()]
     if not websites_list:
         return templates.TemplateResponse("index.html", {
@@ -63,7 +64,8 @@ async def main_form(request: Request):
         "country": country.strip(),
         "city": city.strip(),
         "state": state.strip(),
-        "pincode": pincode.strip()
+        "pincode": pincode.strip(),
+        "subject": subject.strip()
     }
     success_list = []
     contact_not_found = []

@@ -156,6 +156,8 @@ def fill_contact_form(contact_url, form_data):
         find_and_fill(["state", "your-state", "contactstate", "contact_state"], form_data.get("state", ""))
         # Try to fill pincode
         find_and_fill(["pincode", "pin", "zipcode", "zip", "postal", "postalcode", "postal_code", "txtpincode"], form_data.get("pincode", ""))
+        # Try to fill subject
+        find_and_fill(["subject", "your-subject", "contactsubject", "contact_subject", "enquiry_subject", "txtsubject"], form_data.get("subject", ""))
 
         # Try to handle 'I am not a robot' checkboxes (basic reCAPTCHA v2)
         try:
