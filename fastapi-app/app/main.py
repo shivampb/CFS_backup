@@ -74,20 +74,18 @@ async def main_form(request: Request):
         if not (site.startswith("http://") or site.startswith("https://")):
             site = "https://" + site
         contact_url = find_contact_url(site)
-        if contact_url:
-            result = fill_contact_form(contact_url, form_data)
-            if result:
-                success_list.append(site)
-            else:
-                # If form fill failed, but contact_url exists, still try to check if form was filled
-                # Try to check if site is already in success_list (avoid duplicates)
-                if site not in success_list:
-                    contact_not_found.append(site)
-        else:
-            # If no contact_url found, only then add to not found
+        if not contact_url:
             contact_not_found.append(site)
-    # Remove any sites from contact_not_found that are in success_list
-    contact_not_found = [site for site in contact_not_found if site not in success_list]
+            continue
+        try:
+            result = fill_contact_form(contact_url, form_data)
+        except Exception:
+            # If any error occurs (e.g., no form, driver error), treat as not found
+            result = False
+        if result:
+            success_list.append(site)
+        else:
+            contact_not_found.append(site)
     total_sites = len(websites_list)
     success_rate = (len(success_list) / total_sites) * 100 if total_sites else 0
     return templates.TemplateResponse("index.html", {

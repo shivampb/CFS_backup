@@ -50,27 +50,27 @@ def fill_contact_form(contact_url, form_data):
             for form in main_forms:
                 # Try by name, id, placeholder (contains, not just equals)
                 for name in possible_names:
-                    # By name contains, but ignore search fields
+                    # By name contains
                     try:
-                        el = form.find_element(By.XPATH, f".//input[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}') and not(contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search'))]" )
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
                         if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
                             return True
                     except Exception:
                         pass
-                    # By id contains, but ignore search fields
+                    # By id contains
                     try:
-                        el = form.find_element(By.XPATH, f".//input[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}') and not(contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search'))]" )
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
                         if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
                             return True
                     except Exception:
                         pass
-                    # By placeholder contains, but ignore search fields
+                    # By placeholder contains
                     try:
-                        el = form.find_element(By.XPATH, f".//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}') and not(contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'search'))]" )
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
                         if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
                             el.clear()
                             el.send_keys(value)
@@ -133,7 +133,7 @@ def fill_contact_form(contact_url, form_data):
         # Try to fill name
         find_and_fill(["name", "your-name", "fullname", "full_name", "contactname", "contact_name"], form_data["name"])
         # Try to fill email
-        find_and_fill(["email", "your-email", "mail", "contactemail", "contact_email"], form_data["email"])
+        find_and_fill(["email", "your-email", "mail", "contactemail", "contact_email","contact[email]"], form_data["email"])
         # Try to fill message/comment
         filled_message = find_and_fill(["message", "comment", "your-message", "enquiry", "query", "description", "body", "content"], form_data["message"])
         if not filled_message:
