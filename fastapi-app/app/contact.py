@@ -32,89 +32,102 @@ def fill_contact_form(contact_url, form_data):
         driver.get(contact_url)
         time.sleep(3)
 
+        # Find all forms, skip those with class/id containing 'sidebar' or 'popup'
+        forms = driver.find_elements(By.TAG_NAME, "form")
+        main_forms = []
+        for f in forms:
+            form_id = (f.get_attribute('id') or '').lower()
+            form_class = (f.get_attribute('class') or '').lower()
+            if 'sidebar' in form_id or 'sidebar' in form_class or 'popup' in form_id or 'popup' in form_class:
+                continue
+            main_forms.append(f)
+        if not main_forms:
+            main_forms = forms  # fallback: use all forms if none left
+
         def find_and_fill(possible_names, value):
             if not value:
                 return False
-            # Try by name, id, placeholder (contains, not just equals)
-            for name in possible_names:
-                # By name contains
+            for form in main_forms:
+                # Try by name, id, placeholder (contains, not just equals)
+                for name in possible_names:
+                    # By name contains
+                    try:
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
+                            el.clear()
+                            el.send_keys(value)
+                            return True
+                    except Exception:
+                        pass
+                    # By id contains
+                    try:
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
+                            el.clear()
+                            el.send_keys(value)
+                            return True
+                    except Exception:
+                        pass
+                    # By placeholder contains
+                    try:
+                        el = form.find_element(By.XPATH, f".//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
+                            el.clear()
+                            el.send_keys(value)
+                            return True
+                    except Exception:
+                        pass
+                # Try for astralpipes: fill by partial match for 'mobile' and 'pincode' in any attribute
                 try:
-                    el = driver.find_element(By.XPATH, f"//input[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
-                    if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
-                        el.clear()
-                        el.send_keys(value)
-                        return True
+                    if value:
+                        inputs = form.find_elements(By.XPATH, ".//input")
+                        for el in inputs:
+                            attrs = [el.get_attribute('name') or '', el.get_attribute('id') or '', el.get_attribute('placeholder') or '']
+                            attrs = [a.lower() for a in attrs]
+                            if any(n in a for n in possible_names for a in attrs):
+                                if el.is_displayed() and not el.get_attribute('value'):
+                                    el.clear()
+                                    el.send_keys(value)
+                                    return True
                 except Exception:
                     pass
-                # By id contains
+                # Try textarea
+                for name in possible_names:
+                    try:
+                        el = form.find_element(By.XPATH, f".//textarea[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        if not el.get_attribute('value'):
+                            el.clear()
+                            el.send_keys(value)
+                            return True
+                    except Exception:
+                        pass
+                    try:
+                        el = form.find_element(By.XPATH, f".//textarea[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        if not el.get_attribute('value'):
+                            el.clear()
+                            el.send_keys(value)
+                            return True
+                    except Exception:
+                        pass
+                    try:
+                        el = form.find_element(By.XPATH, f".//textarea[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
+                        if not el.get_attribute('value'):
+                            el.clear()
+                            el.send_keys(value)
+                            return True
+                    except Exception:
+                        pass
+                # As a last resort, try to fill any empty visible text input in main form
                 try:
-                    el = driver.find_element(By.XPATH, f"//input[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
-                    if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
-                        el.clear()
-                        el.send_keys(value)
-                        return True
-                except Exception:
-                    pass
-                # By placeholder contains
-                try:
-                    el = driver.find_element(By.XPATH, f"//input[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
-                    if el.get_attribute('type') in [None, '', 'text', 'email', 'tel', 'number', 'password'] and not el.get_attribute('value'):
-                        el.clear()
-                        el.send_keys(value)
-                        return True
-                except Exception:
-                    pass
-            # Try for astralpipes: fill by partial match for 'mobile' and 'pincode' in any attribute
-            try:
-                if value:
-                    inputs = driver.find_elements(By.XPATH, "//input")
-                    for el in inputs:
-                        attrs = [el.get_attribute('name') or '', el.get_attribute('id') or '', el.get_attribute('placeholder') or '']
-                        attrs = [a.lower() for a in attrs]
-                        if any(n in a for n in possible_names for a in attrs):
+                    if value:
+                        inputs = form.find_elements(By.XPATH, ".//input[@type='text' or @type='email' or @type='tel' or @type='number' or @type='password']")
+                        for el in inputs:
                             if el.is_displayed() and not el.get_attribute('value'):
                                 el.clear()
                                 el.send_keys(value)
                                 return True
-            except Exception:
-                pass
-            # Try textarea
-            for name in possible_names:
-                try:
-                    el = driver.find_element(By.XPATH, f"//textarea[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
-                    if not el.get_attribute('value'):
-                        el.clear()
-                        el.send_keys(value)
-                        return True
                 except Exception:
                     pass
-                try:
-                    el = driver.find_element(By.XPATH, f"//textarea[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
-                    if not el.get_attribute('value'):
-                        el.clear()
-                        el.send_keys(value)
-                        return True
-                except Exception:
-                    pass
-                try:
-                    el = driver.find_element(By.XPATH, f"//textarea[contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]" )
-                    if not el.get_attribute('value'):
-                        el.clear()
-                        el.send_keys(value)
-                        return True
-                except Exception:
-                    pass
-            # As a last resort, try to fill any empty visible text input
-            try:
-                if value:
-                    inputs = driver.find_elements(By.XPATH, "//input[@type='text' or @type='email' or @type='tel' or @type='number' or @type='password']")
-                    for el in inputs:
-                        if el.is_displayed() and not el.get_attribute('value'):
-                            el.clear()
-                            el.send_keys(value)
-                            return True
-            except Exception:
-                pass
             return False
 
         # Try to fill name
@@ -125,10 +138,12 @@ def fill_contact_form(contact_url, form_data):
         filled_message = find_and_fill(["message", "comment", "your-message", "enquiry", "query", "description", "body", "content"], form_data["message"])
         if not filled_message:
             try:
-                el = driver.find_element(By.XPATH, "//textarea")
-                if not el.get_attribute('value'):
-                    el.clear()
-                    el.send_keys(form_data["message"])
+                for form in main_forms:
+                    el = form.find_element(By.XPATH, ".//textarea")
+                    if not el.get_attribute('value'):
+                        el.clear()
+                        el.send_keys(form_data["message"])
+                        break
             except Exception:
                 pass
         # Try to fill phone/mobile
@@ -142,11 +157,16 @@ def fill_contact_form(contact_url, form_data):
         # Try to fill pincode
         find_and_fill(["pincode", "pin", "zipcode", "zip", "postal", "postalcode", "postal_code", "txtpincode"], form_data.get("pincode", ""))
 
-        # Try clicking the submit button (input or button with type submit or text 'send')
+        # Try clicking the submit button in the main form
         try:
-            submit_button = driver.find_element(By.XPATH, "//input[@type='submit'] | //button[@type='submit'] | //button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'send')]" )
-            submit_button.click()
-            time.sleep(5)
+            for form in main_forms:
+                try:
+                    submit_button = form.find_element(By.XPATH, ".//input[@type='submit'] | .//button[@type='submit'] | .//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'send')]")
+                    submit_button.click()
+                    time.sleep(5)
+                    break
+                except Exception:
+                    continue
         except Exception:
             driver.quit()
             return False
