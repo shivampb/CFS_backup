@@ -157,6 +157,27 @@ def fill_contact_form(contact_url, form_data):
         # Try to fill pincode
         find_and_fill(["pincode", "pin", "zipcode", "zip", "postal", "postalcode", "postal_code", "txtpincode"], form_data.get("pincode", ""))
 
+        # Try to handle 'I am not a robot' checkboxes (basic reCAPTCHA v2)
+        try:
+            # Switch to reCAPTCHA iframe if present
+            frames = driver.find_elements(By.TAG_NAME, 'iframe')
+            for frame in frames:
+                src = frame.get_attribute('src')
+                title = frame.get_attribute('title')
+                if (src and 'recaptcha' in src) or (title and 'recaptcha' in title.lower()):
+                    driver.switch_to.frame(frame)
+                    try:
+                        checkbox = driver.find_element(By.ID, 'recaptcha-anchor')
+                        if checkbox.is_displayed() and checkbox.is_enabled():
+                            checkbox.click()
+                            time.sleep(3)  # Wait for challenge to process
+                    except Exception:
+                        pass
+                    driver.switch_to.default_content()
+                    break
+        except Exception:
+            pass
+
         # Try clicking the submit button in the main form
         try:
             for form in main_forms:
