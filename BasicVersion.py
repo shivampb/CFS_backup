@@ -61,9 +61,17 @@ def fill_contact_form(contact_url, form_data):
         except:
             pass
 
-        # Try clicking the submit button
+        # Try clicking the submit button (improved for more button types)
         try:
-            submit_button = driver.find_element(By.XPATH, "//input[@type='submit'] | //button[@type='submit']")
+            submit_button = driver.find_element(
+                By.XPATH,
+                "//input[@type='submit'] | "
+                "//button[@type='submit'] | "
+                "//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'submit')] | "
+                "//button[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'subscribe')] | "
+                "//button[contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'newsletter-form__button')] | "
+                "//button[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'commit')]"
+            )
             submit_button.click()
         except:
             driver.quit()
