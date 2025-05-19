@@ -2,13 +2,14 @@ from bs4 import BeautifulSoup
 import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.options import Options
 import time
 
 # === CONFIGURATION ===
-FILL_DELAY = 0.7  # seconds to wait after filling each field
-PAGE_LOAD_DELAY = 2.5  # seconds to wait after loading a contact page
-SUBMIT_DELAY = 2  # seconds to wait after clicking submit
-SWAP_DELAY = 0.5  # seconds to wait between sites
+FILL_DELAY = 0.3  # seconds to wait after filling each field
+PAGE_LOAD_DELAY = 1.5  # seconds to wait after loading a contact page
+SUBMIT_DELAY = 1  # seconds to wait after clicking submit
+SWAP_DELAY = 0.2  # seconds to wait between sites
 
 # === FIND CONTACT PAGE ===
 def find_contact_url(base_url):
@@ -34,7 +35,16 @@ def find_contact_url(base_url):
 # === FILL CONTACT FORM USING SELENIUM ===
 def fill_contact_form(contact_url, form_data):
     try:
-        driver = webdriver.Chrome()
+        # Configure Chrome to run in headless mode
+        chrome_options = Options()
+        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--disable-gpu")
+        chrome_options.add_argument("--window-size=1920,1080")
+        chrome_options.add_argument("--disable-extensions")
+        chrome_options.add_argument("--no-sandbox")
+        chrome_options.add_argument("--disable-dev-shm-usage")
+        
+        driver = webdriver.Chrome(options=chrome_options)
         driver.get(contact_url)
         time.sleep(PAGE_LOAD_DELAY)
 
@@ -220,7 +230,7 @@ def fill_contact_form(contact_url, form_data):
                         ".//button[contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'submit')]"
                     )
                     submit_button.click()
-                    time.sleep(2)  # Wait 2 seconds after click so user can visually confirm the click
+                    time.sleep(SUBMIT_DELAY)  # Wait for submission to complete
                     break
                 except Exception:
                     continue
@@ -239,9 +249,13 @@ def fill_contact_form(contact_url, form_data):
             if indicator in page_source:
                 is_success = True
                 break
+        # Always close the driver to free resources
         driver.quit()
         return is_success
-    except Exception:
+    except Exception as e:
+        # Make sure to close the driver in case of any exception
+        if 'driver' in locals() and driver is not None:
+            driver.quit()
         return False
 
 websites = [
