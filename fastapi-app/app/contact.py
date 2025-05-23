@@ -85,6 +85,11 @@ def fill_contact_form(contact_url, form_data):
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        # WebGL and DevTools configurations
+        chrome_options.add_argument("--enable-unsafe-swiftshader")
+        chrome_options.add_argument("--disable-software-rasterizer")
+        chrome_options.add_argument("--disable-webgl")
+        chrome_options.add_argument("--disable-webgl2")
         # Performance optimizations
         chrome_options.add_argument("--disable-javascript-harmony-shipping")
         chrome_options.add_argument("--disable-dev-tools")
@@ -266,50 +271,103 @@ def fill_contact_form(contact_url, form_data):
         find_and_fill(["pincode", "pin", "zipcode", "zip", "postal", "postalcode", "postal_code", "txtpincode"], form_data.get("pincode", ""))
         find_and_fill(["subject", "your-subject", "contactsubject", "contact_subject", "enquiry_subject", "txtsubject"], form_data.get("subject", ""))
 
-        # Try to handle 'I am not a robot' checkboxes (basic reCAPTCHA v2)
-        try:
-            # Switch to reCAPTCHA iframe if present
-            frames = driver.find_elements(By.TAG_NAME, 'iframe')
-            for frame in frames:
-                src = frame.get_attribute('src')
-                title = frame.get_attribute('title')
-                if (src and 'recaptcha' in src) or (title and 'recaptcha' in title.lower()):
-                    driver.switch_to.frame(frame)
-                    try:
-                        checkbox = driver.find_element(By.ID, 'recaptcha-anchor')
-                        if checkbox.is_displayed() and checkbox.is_enabled():
-                            checkbox.click()
-                            time.sleep(3)  # Wait for challenge to process
-                    except Exception:
-                        pass
-                    driver.switch_to.default_content()
-                    break
-        except Exception:
-            pass
-
-        # Try clicking the submit button in the main form (robust for various button types)
+        # Try to handle checkboxes and reCAPTCHA
         try:
             for form in main_forms:
+                # Handle regular checkboxes first
+                checkboxes = form.find_elements(By.XPATH, ".//input[@type='checkbox']")
+                for checkbox in checkboxes:
+                    # Look for common terms checkboxes by examining attributes and nearby text
+                    checkbox_id = (checkbox.get_attribute('id') or '').lower()
+                    checkbox_name = (checkbox.get_attribute('name') or '').lower()
+                    checkbox_class = (checkbox.get_attribute('class') or '').lower()
+                    
+                    # Try to get the label text if it exists
+                    label_text = ''
+                    try:
+                        # Check for label using 'for' attribute
+                        if checkbox_id:
+                            label = form.find_element(By.CSS_SELECTOR, f"label[for='{checkbox_id}']")
+                            label_text = label.text.lower()
+                    except:
+                        # If no label found with 'for', try parent/sibling elements
+                        try:
+                            parent = checkbox.find_element(By.XPATH, "./..")
+                            label_text = parent.text.lower()
+                        except:
+                            pass
+
+                    # Keywords that suggest important checkboxes
+                    important_keywords = [
+                        'agree', 'accept', 'consent', 'confirm', 'privacy', 
+                        'policy', 'terms', 'conditions', 'required', 'human', 
+                        'robot', 'recaptcha', 'verify', 'newsletter'
+                    ]
+
+                    # Check if this is an important checkbox we should click
+                    should_click = False
+                    for keyword in important_keywords:
+                        if (keyword in checkbox_id or 
+                            keyword in checkbox_name or 
+                            keyword in checkbox_class or 
+                            keyword in label_text):
+                            should_click = True
+                            break
+
+                    # Click the checkbox if it's important and not already checked
+                    if should_click and checkbox.is_displayed() and checkbox.is_enabled():
+                        if not checkbox.is_selected():
+                            try:
+                                checkbox.click()
+                                time.sleep(FILL_DELAY)
+                            except:
+                                # If direct click fails, try JavaScript click
+                                try:
+                                    driver.execute_script("arguments[0].click();", checkbox)
+                                    time.sleep(FILL_DELAY)
+                                except:
+                                    pass
+
+            # Handle reCAPTCHA frames
+            recaptcha_frames = driver.find_elements(By.XPATH, "//iframe[contains(@src, 'recaptcha')]")
+            for frame in recaptcha_frames:
                 try:
-                    submit_button = form.find_element(
-                        By.XPATH,
-                        ".//input[@type='submit'] | "
-                        ".//button[@type='submit'] | "
-                        ".//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'submit')] | "
-                        ".//button[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'subscribe')] | "
-                        ".//button[contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'newsletter-form__button')] | "
-                        ".//button[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'commit')] | "
-                        ".//button[contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'submit')]"
-                    )
-                    submit_button.click()
-                    time.sleep(SUBMIT_DELAY)  # Wait for submission to complete
-                    break
+                    driver.switch_to.frame(frame)
+                    checkbox = driver.find_element(By.CLASS_NAME, "recaptcha-checkbox-border")
+                    if checkbox.is_displayed() and checkbox.is_enabled():
+                        checkbox.click()
+                        time.sleep(SUBMIT_DELAY)  # Give it time to verify
+                    driver.switch_to.default_content()
                 except Exception:
+                    driver.switch_to.default_content()
                     continue
+
+            # After handling checkboxes and reCAPTCHA, try to submit the form
+            try:
+                for form in main_forms:
+                    try:
+                        submit_button = form.find_element(
+                            By.XPATH,
+                            ".//input[@type='submit'] | "
+                            ".//button[@type='submit'] | "
+                            ".//button[contains(translate(text(), 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'submit')] | "
+                            ".//button[contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'subscribe')] | "
+                            ".//button[contains(translate(@class, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'newsletter-form__button')] | "
+                            ".//button[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'commit')] | "
+                            ".//button[contains(translate(@aria-label, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), 'submit')]"
+                        )
+                        submit_button.click()
+                        time.sleep(SUBMIT_DELAY)  # Wait for submission to complete
+                        break
+                    except Exception:
+                        continue
+            except Exception:
+                if driver is not None:
+                    driver.quit()
+                return False
+
         except Exception:
-            if driver is not None:
-                driver.quit()
-            return False
+            pass
 
         # After submission, check for success indicators
         page_source = driver.page_source.lower()
@@ -419,6 +477,62 @@ def is_likely_contact_form(form):
         return False
     except Exception:
         return False
+
+def click_relevant_checkboxes(form):
+    """Click relevant checkboxes in the form"""
+    try:
+        # Important keywords that indicate required checkboxes
+        important_keywords = [
+            'agree', 'accept', 'consent', 'confirm', 'privacy', 
+            'policy', 'terms', 'conditions', 'required', 'human', 
+            'robot', 'recaptcha', 'verify', 'newsletter'
+        ]
+        
+        # Find all checkboxes in the form
+        checkboxes = form.find_elements(By.XPATH, ".//input[@type='checkbox']")
+        
+        for checkbox in checkboxes:
+            try:
+                # Get all relevant attributes
+                checkbox_id = (checkbox.get_attribute('id') or '').lower()
+                checkbox_name = (checkbox.get_attribute('name') or '').lower()
+                checkbox_class = (checkbox.get_attribute('class') or '').lower()
+                checkbox_text = ''
+                
+                # Try to get associated label text
+                try:
+                    # First try finding label by for attribute
+                    if checkbox_id:
+                        label = form.find_element(By.XPATH, f".//label[@for='{checkbox_id}']")
+                        checkbox_text = label.text.lower()
+                except:
+                    try:
+                        # Then try finding parent label
+                        label = checkbox.find_element(By.XPATH, "./ancestor::label")
+                        checkbox_text = label.text.lower()
+                    except:
+                        pass
+                
+                # Check if this checkbox seems important
+                is_important = any(
+                    keyword in checkbox_id or 
+                    keyword in checkbox_name or 
+                    keyword in checkbox_class or 
+                    keyword in checkbox_text 
+                    for keyword in important_keywords
+                )
+                
+                # Click if it's important and not already checked
+                if is_important and not checkbox.is_selected():
+                    if checkbox.is_displayed() and checkbox.is_enabled():
+                        checkbox.click()
+                        time.sleep(FILL_DELAY)
+                
+            except Exception:
+                continue
+                
+    except Exception:
+        pass
 
 websites = [
     # ...existing code...
