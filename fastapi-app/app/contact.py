@@ -3,15 +3,56 @@ import requests
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 
 # === CONFIGURATION ===
-FILL_DELAY = 0.3  # seconds to wait after filling each field
-PAGE_LOAD_DELAY = 1.5  # seconds to wait after loading a contact page
-SUBMIT_DELAY = 1  # seconds to wait after clicking submit
-SWAP_DELAY = 0.2  # seconds to wait between sites
+FILL_DELAY = 0.1  # reduced delay after filling each field
+PAGE_LOAD_DELAY = 0.5  # reduced delay after loading a contact page
+SUBMIT_DELAY = 0.5  # reduced delay after clicking submit
+SWAP_DELAY = 0.1  # reduced delay between sites
+MAX_TIMEOUT = 10  # maximum timeout for page load
+MAX_WORKERS = 5  # number of parallel workers
 
-# === FIND CONTACT PAGE ===
+def process_website(site, form_data):
+    try:
+        if not (site.startswith("http://") or site.startswith("https://")):
+            site = "https://" + site
+            
+        contact_url = find_contact_url(site)
+        if not contact_url:
+            return (site, False, "No contact page found")
+            
+        result = fill_contact_form(contact_url, form_data)
+        if result:
+            return (site, True, "Success")
+        return (site, False, "Form submission failed")
+    except Exception as e:
+        return (site, False, str(e))
+
+def process_websites(websites_list, form_data):
+    success_list = []
+    contact_not_found = []
+    
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        future_to_site = {
+            executor.submit(process_website, site, form_data): site 
+            for site in websites_list
+        }
+        
+        for future in as_completed(future_to_site):
+            site, success, message = future.result()
+            if success:
+                success_list.append(site)
+                print(f"✔️ {site}: Form submitted successfully")
+            else:
+                contact_not_found.append(site)
+                print(f"❌ {site}: {message}")
+    
+    return success_list, contact_not_found
+
 def find_contact_url(base_url):
     try:
         response = requests.get(base_url, timeout=10)
@@ -34,31 +75,62 @@ def find_contact_url(base_url):
 
 # === FILL CONTACT FORM USING SELENIUM ===
 def fill_contact_form(contact_url, form_data):
+    driver = None
     try:
         # Configure Chrome to run in headless mode
         chrome_options = Options()
-        chrome_options.add_argument("--headless")
+        chrome_options.add_argument("--headless=new")
         chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--window-size=1920,1080")
         chrome_options.add_argument("--disable-extensions")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
+        # Performance optimizations
+        chrome_options.add_argument("--disable-javascript-harmony-shipping")
+        chrome_options.add_argument("--disable-dev-tools")
+        chrome_options.add_argument("--dns-prefetch-disable")
+        chrome_options.add_argument("--disable-background-networking")
+        chrome_options.page_load_strategy = 'eager'  # Don't wait for all resources to load
+        chrome_options.add_experimental_option('excludeSwitches', ['enable-logging'])
+        chrome_options.add_argument("--log-level=3")
         
         driver = webdriver.Chrome(options=chrome_options)
-        driver.get(contact_url)
-        time.sleep(PAGE_LOAD_DELAY)
+        driver.set_page_load_timeout(MAX_TIMEOUT)
+        driver.set_script_timeout(MAX_TIMEOUT)
+        try:
+            driver.get(contact_url)
+            # Use WebDriverWait instead of sleep
+            WebDriverWait(driver, PAGE_LOAD_DELAY).until(
+                EC.presence_of_element_located((By.TAG_NAME, "form"))
+            )
+        except Exception:
+            # If timeout or no form found, continue with normal flow
+            pass
 
-        # Find all forms, skip those with class/id containing 'sidebar' or 'popup'
+        # Find all forms and filter intelligently
         forms = driver.find_elements(By.TAG_NAME, "form")
         main_forms = []
-        for f in forms:
-            form_id = (f.get_attribute('id') or '').lower()
-            form_class = (f.get_attribute('class') or '').lower()
-            if 'sidebar' in form_id or 'sidebar' in form_class or 'popup' in form_id or 'popup' in form_class:
-                continue
-            main_forms.append(f)
+        
+        # First, try to find forms that are explicitly contact forms
+        for form in forms:
+            if is_likely_contact_form(form) and not is_popup_or_newsletter_form(form):
+                main_forms.append(form)
+        
+        # If no explicit contact form found, try forms with multiple fields that aren't popups
         if not main_forms:
-            main_forms = forms  # fallback: use all forms if none left
+            for form in forms:
+                if not is_popup_or_newsletter_form(form):
+                    inputs = form.find_elements(By.TAG_NAME, "input")
+                    textareas = form.find_elements(By.TAG_NAME, "textarea")
+                    if len(inputs) + len(textareas) >= 3:  # Form has enough fields
+                        main_forms.append(form)
+        
+        # If still no forms found, use all forms as fallback
+        if not main_forms:
+            main_forms = [f for f in forms if not is_popup_or_newsletter_form(f)]
+        
+        if not main_forms:
+            main_forms = forms  # Last resort: use all forms if none left
 
         def find_and_fill(possible_names, value):
             if not value:
@@ -256,6 +328,96 @@ def fill_contact_form(contact_url, form_data):
         # Make sure to close the driver in case of any exception
         if 'driver' in locals() and driver is not None:
             driver.quit()
+        return False
+
+def is_popup_or_newsletter_form(form):
+    """Check if a form is likely a popup or newsletter form"""
+    try:
+        # Get all form attributes
+        form_id = (form.get_attribute('id') or '').lower()
+        form_class = (form.get_attribute('class') or '').lower()
+        form_html = form.get_attribute('outerHTML').lower()
+        
+        # Keywords that indicate popup/newsletter forms
+        popup_indicators = [
+            'popup', 'modal', 'newsletter', 'subscribe', 'sidebar',
+            'overlay', 'floating', 'notification', 'alert', 
+            'chat', 'messenger', 'livechat', 'drift', 'intercom',
+            'zendesk', 'cookie', 'gdpr', 'promotion', 'offer',
+            'discount', 'sale', 'signup', 'login', 'register'
+        ]
+        
+        # Check form attributes for popup indicators
+        for indicator in popup_indicators:
+            if (indicator in form_id or 
+                indicator in form_class or 
+                indicator in form_html):
+                return True
+        
+        # Check form position/style
+        style = form.get_attribute('style') or ''
+        if ('position: fixed' in style or 
+            'position: absolute' in style or 
+            'z-index' in style):
+            return True
+            
+        # Check form size (small forms are likely not contact forms)
+        inputs = form.find_elements(By.TAG_NAME, "input")
+        textareas = form.find_elements(By.TAG_NAME, "textarea")
+        if len(inputs) + len(textareas) < 3:  # Too few fields for a contact form
+            return True
+            
+        return False
+    except Exception:
+        return False
+
+def is_likely_contact_form(form):
+    """Check if a form is likely the main contact form"""
+    try:
+        form_id = (form.get_attribute('id') or '').lower()
+        form_class = (form.get_attribute('class') or '').lower()
+        form_html = form.get_attribute('outerHTML').lower()
+        
+        # Keywords that indicate contact forms
+        contact_indicators = [
+            'contact', 'enquiry', 'inquiry', 'feedback', 
+            'support', 'help-form', 'contact-us', 'get-in-touch',
+            'reach-us', 'write-to-us', 'send-message'
+        ]
+        
+        # Check for contact form indicators
+        for indicator in contact_indicators:
+            if (indicator in form_id or 
+                indicator in form_class or 
+                indicator in form_html):
+                return True
+        
+        # Check for typical contact form fields
+        required_fields = ['name', 'email', 'message']
+        field_count = 0
+        
+        # Check input fields
+        inputs = form.find_elements(By.TAG_NAME, "input")
+        textareas = form.find_elements(By.TAG_NAME, "textarea")
+        
+        for el in inputs + textareas:
+            el_name = (el.get_attribute('name') or '').lower()
+            el_id = (el.get_attribute('id') or '').lower()
+            el_placeholder = (el.get_attribute('placeholder') or '').lower()
+            
+            for field in required_fields:
+                if (field in el_name or 
+                    field in el_id or 
+                    field in el_placeholder):
+                    field_count += 1
+                    break
+        
+        # If we found most of the typical contact form fields
+        if field_count >= 2:
+            return True
+            
+        return False
+    except Exception:
         return False
 
 websites = [

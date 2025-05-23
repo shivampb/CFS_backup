@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from app.contact import find_contact_url, fill_contact_form
+from app.contact import find_contact_url, fill_contact_form, process_websites
 
 app = FastAPI()
 templates = Jinja2Templates(directory="app/templates")
@@ -67,25 +67,8 @@ async def main_form(request: Request):
         "pincode": pincode.strip(),
         "subject": subject.strip()
     }
-    success_list = []
-    contact_not_found = []
-    for site in websites_list:
-        # Automatically add https:// if missing
-        if not (site.startswith("http://") or site.startswith("https://")):
-            site = "https://" + site
-        contact_url = find_contact_url(site)
-        if not contact_url:
-            contact_not_found.append(site)
-            continue
-        try:
-            result = fill_contact_form(contact_url, form_data)
-        except Exception:
-            # If any error occurs (e.g., no form, driver error), treat as not found
-            result = False
-        if result:
-            success_list.append(site)
-        else:
-            contact_not_found.append(site)
+    # Process websites in parallel
+    success_list, contact_not_found = process_websites(websites_list, form_data)
     total_sites = len(websites_list)
     success_rate = (len(success_list) / total_sites) * 100 if total_sites else 0
     return templates.TemplateResponse("index.html", {
