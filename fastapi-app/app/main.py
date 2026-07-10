@@ -1,9 +1,15 @@
 import logging
+import sys
+from pathlib import Path
 from fastapi import FastAPI, Form, Request, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.concurrency import run_in_threadpool
 from typing import Optional
+
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
 
 from app.core.engine import process_websites
 
@@ -26,7 +32,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-templates = Jinja2Templates(directory="app/templates")
+templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 # Existing routes
 @app.api_route("/", methods=["GET", "POST"], response_class=HTMLResponse)
@@ -50,19 +56,20 @@ async def main_form(request: Request):
                 "city": "",
                 "state": "",
                 "pincode": "",
+                "subject": "",
             },
         )
     form = await request.form()
-    websites = form.get("websites", "")
-    name = form.get("name", "")
-    email = form.get("email", "")
-    message = form.get("message", "")
-    phone = form.get("phone", "")
-    country = form.get("country", "")
-    city = form.get("city", "")
-    state = form.get("state", "")
-    pincode = form.get("pincode", "")
-    subject = form.get("subject", "")
+    websites = str(form.get("websites", ""))
+    name = str(form.get("name", ""))
+    email = str(form.get("email", ""))
+    message = str(form.get("message", ""))
+    phone = str(form.get("phone", ""))
+    country = str(form.get("country", ""))
+    city = str(form.get("city", ""))
+    state = str(form.get("state", ""))
+    pincode = str(form.get("pincode", ""))
+    subject = str(form.get("subject", ""))
     websites_list = [w.strip() for w in websites.splitlines() if w.strip()]
     if not websites_list:
         return templates.TemplateResponse(
@@ -83,6 +90,7 @@ async def main_form(request: Request):
                 "city": city,
                 "state": state,
                 "pincode": pincode,
+                "subject": subject,
             },
         )
     form_data = {
@@ -96,8 +104,8 @@ async def main_form(request: Request):
         "pincode": pincode.strip(),
         "subject": subject.strip(),
     }
-    # Process websites in parallel
-    success_list, contact_not_found = process_websites(websites_list, form_data)
+    # Process websites in parallel without blocking event loop
+    success_list, contact_not_found = await run_in_threadpool(process_websites, websites_list, form_data)
     total_sites = len(websites_list)
     success_rate = (len(success_list) / total_sites) * 100 if total_sites else 0
     return templates.TemplateResponse(
@@ -118,5 +126,6 @@ async def main_form(request: Request):
             "city": "",
             "state": "",
             "pincode": "",
+            "subject": "",
         },
     )

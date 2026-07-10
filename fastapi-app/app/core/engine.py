@@ -44,9 +44,7 @@ def process_websites(websites_list, form_data):
             site, success, message = future.result()
             if success:
                 success_list.append(site)
-                print(f"✔️ {site}: Form submitted successfully")
             else:
                 contact_not_found.append(site)
-                print(f"❌ {site}: {message}")
 
     return success_list, contact_not_found

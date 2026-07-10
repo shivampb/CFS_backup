@@ -30,6 +30,9 @@ def is_popup_or_newsletter_form(form):
         # Check form attributes for popup indicators
         for indicator in popup_indicators:
             if indicator in form_id or indicator in form_class or indicator in form_html:
+                # Double check: if it has "contact" explicitly, maybe ignore popup indicator
+                if "contact" in form_id or "contact" in form_class:
+                     continue
                 return True
 
         # Check form position/style
@@ -40,7 +43,7 @@ def is_popup_or_newsletter_form(form):
         # Check form size (small forms are likely not contact forms)
         inputs = form.find_elements(By.TAG_NAME, "input")
         textareas = form.find_elements(By.TAG_NAME, "textarea")
-        if len(inputs) + len(textareas) < 3:  # Too few fields for a contact form
+        if len(inputs) + len(textareas) < 2:  # Too few fields for a contact form
             return True
 
         return False
@@ -59,7 +62,7 @@ def is_likely_contact_form(form):
         contact_indicators = [
             "contact", "enquiry", "inquiry", "feedback", "support",
             "help-form", "contact-us", "get-in-touch", "reach-us",
-            "write-to-us", "send-message"
+            "write-to-us", "send-message", "appointment", "booking", "consultation"
         ]
 
         # Check for contact form indicators
@@ -68,7 +71,7 @@ def is_likely_contact_form(form):
                 return True
 
         # Check for typical contact form fields
-        required_fields = ["name", "email", "message"]
+        required_fields = ["name", "email", "message", "phone", "subject"]
         field_count = 0
 
         # Check input fields
@@ -79,6 +82,10 @@ def is_likely_contact_form(form):
             el_name = (el.get_attribute("name") or "").lower()
             el_id = (el.get_attribute("id") or "").lower()
             el_placeholder = (el.get_attribute("placeholder") or "").lower()
+            el_type = (el.get_attribute("type") or "").lower()
+
+            if el_type == "hidden" or el_type == "submit":
+                continue
 
             for field in required_fields:
                 if field in el_name or field in el_id or field in el_placeholder:
@@ -86,7 +93,13 @@ def is_likely_contact_form(form):
                     break
 
         # If we found most of the typical contact form fields
-        if field_count >= 2:
+        if field_count >= 1: # Lowered threshold to 1 if we are desperate or it's a simple form
+            return True
+            
+        # Fallback: if it has at least 3 visible inputs + textareas, consider it
+        visible_inputs = [i for i in inputs if i.is_displayed()]
+        visible_textareas = [t for t in textareas if t.is_displayed()]
+        if len(visible_inputs) + len(visible_textareas) >= 3:
             return True
 
         return False
@@ -174,25 +187,30 @@ def fill_dropdowns(form, form_data):
                     except:
                         # Try case-insensitive partial match
                         found = False
-                        for option in select.options:
+                        for idx, option in enumerate(select.options):
                             if value_to_select.lower() in option.text.lower():
-                                select.select_by_index(option.index)
+                                select.select_by_index(idx)
                                 time.sleep(FILL_DELAY)
                                 found = True
                                 break
                         if found:
                             continue
 
-                # If no specific match or selection failed, and it's a required valid field
-                # just pick the first meaningful option 
+                # If no specific match or selection failed, just pick the first meaningful option
                 if len(select.options) > 1:
                     try:
-                        # Check if first option is a placeholder
-                        first_text = select.options[0].text.lower()
-                        if "select" in first_text or "choose" in first_text or first_text == "":
-                            select.select_by_index(1)
+                        # Randomly select reasonably if many options, else first meaningful
+                        valid_options = []
+                        for i, opt in enumerate(select.options):
+                            if "select" not in opt.text.lower() and "choose" not in opt.text.lower() and opt.text.strip():
+                                valid_options.append(i)
+                        
+                        if valid_options:
+                            idx = random.choice(valid_options)
+                            select.select_by_index(idx)
                         else:
-                            select.select_by_index(0)
+                            select.select_by_index(1) # Fallback
+                        
                         time.sleep(FILL_DELAY)
                     except:
                         pass
@@ -203,7 +221,7 @@ def fill_dropdowns(form, form_data):
         pass
 
 
-def fill_random_data(form):
+def fill_random_data(form, form_data=None):
     """Fill empty input fields with random data to ensure submission"""
     try:
         # Inputs
@@ -220,20 +238,25 @@ def fill_random_data(form):
                 etype = (el.get_attribute("type") or "text").lower()
                 name = (el.get_attribute("name") or "").lower()
                 eid = (el.get_attribute("id") or "").lower()
+                placeholder = (el.get_attribute("placeholder") or "").lower()
                 
                 # Skip special types
-                if etype in ["hidden", "submit", "button", "image", "file", "checkbox", "radio", "reset", "search"]:
+                if etype in ["hidden", "submit", "button", "image", "file", "reset", "search"]:
+                    continue
+
+                # Skip checkboxes and radios here (handled separately, but if empty text nearby?)
+                if etype in ["checkbox", "radio"]:
                     continue
                 
                 # Skip if it looks like a search field
-                if "search" in name or "search" in eid:
+                if "search" in name or "search" in eid or "search" in placeholder:
                     continue
                     
                 # Generate value based on type or name context
                 val = ""
-                if "email" in etype or "email" in name:
+                if "email" in etype or "email" in name or "mail" in name:
                     val = f"user{random.randint(1000,9999)}@example.com"
-                elif "tel" in etype or "number" in etype or "phone" in name or "zip" in name or "code" in name:
+                elif "tel" in etype or "number" in etype or "phone" in name or "zip" in name or "code" in name or "mobile" in name:
                     val = "".join(random.choices(string.digits, k=10))
                 elif "url" in etype or "website" in name:
                     val = "https://example.com"
@@ -248,16 +271,20 @@ def fill_random_data(form):
                 el.clear()
                 el.send_keys(val)
                 time.sleep(0.1)
+                print(f"    🎲 Filled random data '{val}' into field '{name or eid}'", flush=True)
             except:
                 pass
                 
         # Textareas
+        fallback_msg = (form_data.get("message") if form_data and isinstance(form_data, dict) and form_data.get("message") else None) or "Looking forward to hearing from you. Thanks."
         textareas = form.find_elements(By.TAG_NAME, "textarea")
         for el in textareas:
             try:
                 if el.is_displayed() and el.is_enabled() and not el.get_attribute("value"):
-                    el.send_keys("Looking forward to hearing from you. Thanks.")
+                    el.clear()
+                    el.send_keys(fallback_msg)
                     time.sleep(0.1)
+                    print(f"    ✏️  Filled 'message' in textarea field (fallback)", flush=True)
             except:
                 pass
     except:
@@ -265,18 +292,18 @@ def fill_random_data(form):
 
 
 def click_relevant_checkboxes(form):
-    """Click relevant checkboxes in the form"""
+    """Click relevant checkboxes in the form, including Captchas"""
     try:
         # Important keywords that indicate required checkboxes
         important_keywords = [
             "agree", "accept", "consent", "confirm", "privacy", "policy",
             "terms", "conditions", "required", "human", "robot",
-            "recaptcha", "verify", "newsletter"
+            "recaptcha", "verify", "newsletter", "not a robot"
         ]
 
-        # Find all checkboxes in the form
+        # Find all checkboxes
         checkboxes = form.find_elements(By.XPATH, ".//input[@type='checkbox']")
-
+        
         for checkbox in checkboxes:
             try:
                 # Get all relevant attributes
@@ -284,40 +311,76 @@ def click_relevant_checkboxes(form):
                 checkbox_name = (checkbox.get_attribute("name") or "").lower()
                 checkbox_class = (checkbox.get_attribute("class") or "").lower()
                 checkbox_text = ""
+                aria_label = (checkbox.get_attribute("aria-label") or "").lower()
 
                 # Try to get associated label text
                 try:
-                    # First try finding label by for attribute
                     if checkbox_id:
-                        label = form.find_element(
-                            By.XPATH, f".//label[@for='{checkbox_id}']"
-                        )
+                        label = form.find_element(By.XPATH, f".//label[@for='{checkbox_id}']")
                         checkbox_text = label.text.lower()
                 except:
-                    try:
-                        # Then try finding parent label
-                        label = checkbox.find_element(By.XPATH, "./ancestor::label")
-                        checkbox_text = label.text.lower()
-                    except:
-                        pass
+                    pass
+                try:
+                    label = checkbox.find_element(By.XPATH, "./ancestor::label")
+                    checkbox_text += label.text.lower()
+                except:
+                    pass
+
+                combined_text = f"{checkbox_id} {checkbox_name} {checkbox_class} {checkbox_text} {aria_label}"
 
                 # Check if this checkbox seems important
-                is_important = any(
-                    keyword in checkbox_id
-                    or keyword in checkbox_name
-                    or keyword in checkbox_class
-                    or keyword in checkbox_text
-                    for keyword in important_keywords
-                )
+                is_important = any(keyword in combined_text for keyword in important_keywords)
 
-                # Click if it's important and not already checked
                 if is_important and not checkbox.is_selected():
                     if checkbox.is_displayed() and checkbox.is_enabled():
                         checkbox.click()
                         time.sleep(FILL_DELAY)
+                        print(f"    ☑️  Clicked checkbox: {combined_text[:50]}...", flush=True)
 
             except Exception:
                 continue
+        
+        # Helper to click captcha elements
+        def click_captcha_element(el, desc):
+             try:
+                 if el.is_displayed() and el.is_enabled():
+                     # Check if it has a click listener or is a checkbox replacement
+                     cname = (el.get_attribute("class") or "").lower()
+                     eid = (el.get_attribute("id") or "").lower()
+                     
+                     # Only click if it's reasonably a checkbox/captcha
+                     # Avoid clicking container divs unless they are specific
+                     if "checkbox" in cname or "box" in cname or "anchor" in cname or "recaptcha" in cname or "recaptcha" in eid:
+                         el.click()
+                         print(f"    ☑️  Clicked potential captcha element ({desc}): {cname}", flush=True)
+                         time.sleep(2) # Wait a bit as requested per "wait little"
+             except:
+                 pass
+
+        # KEY ADDITION: Handle Non-standard Captchas (Ticket Icon)
+        # 1. Look for elements with class/id containing recaptcha/captcha
+        try:
+            potential_captchas = form.find_elements(By.XPATH, 
+                ".//*[contains(@class, 'recaptcha') or contains(@id, 'recaptcha') or contains(@class, 'captcha') or contains(@id, 'captcha')]")
+            
+            for el in potential_captchas:
+                if el.tag_name in ["iframe", "script", "style", "link"]:
+                    continue 
+                click_captcha_element(el, "class/id match")
+        except:
+            pass
+            
+        # 2. Look for specific tick icons (SVG or i tags) often used in custom checkboxes
+        try:
+             icons = form.find_elements(By.XPATH, ".//i[contains(@class, 'fa-check') or contains(@class, 'icon-check')] | .//svg[contains(@class, 'check')]")
+             for icon in icons:
+                 # Check if parent is a checkbox container
+                 parent = icon.find_element(By.XPATH, "./..")
+                 parent_class = (parent.get_attribute("class") or "").lower()
+                 if "check" in parent_class or "box" in parent_class:
+                     click_captcha_element(parent, "icon parent")
+        except:
+            pass
 
     except Exception:
         pass

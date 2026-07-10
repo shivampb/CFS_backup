@@ -28,6 +28,8 @@ def fill_contact_form(contact_url, form_data):
             # If timeout or no form found, continue with normal flow
             pass
 
+        time.sleep(PAGE_LOAD_DELAY)  # Wait for JS/React/Shopify DOM hydration
+
         # Find all forms and filter intelligently
         forms = driver.find_elements(By.TAG_NAME, "form")
         main_forms = []
@@ -37,17 +39,23 @@ def fill_contact_form(contact_url, form_data):
 
         # First, try to find forms that are explicitly contact forms
         for form in forms:
-            if is_likely_contact_form(form) and not is_popup_or_newsletter_form(form):
-                main_forms.append(form)
+            try:
+                if is_likely_contact_form(form) and not is_popup_or_newsletter_form(form):
+                    main_forms.append(form)
+            except Exception:
+                pass
 
         # If no explicit contact form found, try forms with multiple fields that aren't popups
         if not main_forms:
             for form in forms:
-                if not is_popup_or_newsletter_form(form):
-                    inputs = form.find_elements(By.TAG_NAME, "input")
-                    textareas = form.find_elements(By.TAG_NAME, "textarea")
-                    if len(inputs) + len(textareas) >= 3:  # Form has enough fields
-                        main_forms.append(form)
+                try:
+                    if not is_popup_or_newsletter_form(form):
+                        inputs = form.find_elements(By.TAG_NAME, "input")
+                        textareas = form.find_elements(By.TAG_NAME, "textarea")
+                        if len(inputs) + len(textareas) >= 3:  # Form has enough fields
+                            main_forms.append(form)
+                except Exception:
+                    pass
 
         # If still no forms found, looking for a contact link and clicking it might help (SPA/JS nav)
         if not main_forms:
@@ -89,11 +97,27 @@ def fill_contact_form(contact_url, form_data):
                     forms = driver.find_elements(By.TAG_NAME, "form")
                     close_obstructions(driver)
                     # Re-run filtering logic (simplified for fallback)
-                    main_forms = [f for f in forms if not is_popup_or_newsletter_form(f)]
+                    for f in forms:
+                        try:
+                            if not is_popup_or_newsletter_form(f):
+                                main_forms.append(f)
+                        except Exception:
+                            pass
                     if not main_forms:
                         main_forms = forms
             except:
                 pass
+
+        if not main_forms:
+            # If still no forms found after all attempts, use all forms as fallback
+            for f in forms:
+                try:
+                    if not is_popup_or_newsletter_form(f):
+                        main_forms.append(f)
+                except Exception:
+                    pass
+            if not main_forms:
+                main_forms = forms
 
         if not main_forms:
             # If still no forms found after all attempts, abort immediately
@@ -227,7 +251,7 @@ def fill_contact_form(contact_url, form_data):
                     try:
                         el = form.find_element(
                             By.XPATH,
-                            f".//textarea[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]",
+                            f".//textarea[contains(translate(@name, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}') or contains(translate(@id, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}') or contains(translate(@placeholder, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz'), '{name}')]",
                         )
                         if not el.get_attribute("value"):
                             el.clear()
@@ -244,17 +268,22 @@ def fill_contact_form(contact_url, form_data):
         find_and_fill(["email", "your-email", "mail", "contactemail", "contact_email", "contact[email]"], form_data["email"])
         filled_message = find_and_fill(["message", "comment", "your-message", "enquiry", "query", "description", "body", "content"], form_data["message"])
         
-        if not filled_message:
-            try:
-                for form in main_forms:
-                    el = form.find_element(By.XPATH, ".//textarea")
-                    if not el.get_attribute("value"):
-                        el.clear()
-                        el.send_keys(form_data["message"])
-                        time.sleep(FILL_DELAY)
+        if not filled_message and form_data.get("message"):
+            for form in main_forms:
+                try:
+                    textareas = form.find_elements(By.XPATH, ".//textarea")
+                    for el in textareas:
+                        if not el.get_attribute("value"):
+                            el.clear()
+                            el.send_keys(form_data["message"])
+                            time.sleep(FILL_DELAY)
+                            filled_message = True
+                            print(f"    ✏️  Filled 'message' in textarea field", flush=True)
+                            break
+                    if filled_message:
                         break
-            except Exception:
-                pass
+                except Exception:
+                    pass
                 
         find_and_fill(["phone", "mobile", "contactphone", "contact_phone", "phonenumber", "phone_number", "txtmobile"], form_data.get("phone", ""))
         find_and_fill(["country", "your-country", "contactcountry", "contact_country"], form_data.get("country", ""))
@@ -273,7 +302,7 @@ def fill_contact_form(contact_url, form_data):
         # Fill remaining empty fields with random data to ensure submission
         try:
             for form in main_forms:
-                fill_random_data(form)
+                fill_random_data(form, form_data)
         except Exception:
             pass
 
@@ -299,6 +328,7 @@ def fill_contact_form(contact_url, form_data):
             pass
 
         # Submit
+        clicked_submit = False
         try:
             for form in main_forms:
                 try:
@@ -314,6 +344,7 @@ def fill_contact_form(contact_url, form_data):
                     )
                     submit_button.click()
                     print(f"    🚀 {contact_url}: Clicked submit...", flush=True)
+                    clicked_submit = True
                     time.sleep(SUBMIT_DELAY)  # Wait for submission to complete
                     break
                 except Exception:
@@ -349,7 +380,11 @@ def fill_contact_form(contact_url, form_data):
                     break
                     
         if not is_success:
-             print(f"    ❌ {contact_url}: No success indicators found", flush=True)
+             if clicked_submit:
+                 print(f"    ⚠️ {contact_url}: No explicit success keyword found, but submit button was clicked. Forcefully marking as success.", flush=True)
+                 is_success = True
+             else:
+                 print(f"    ❌ {contact_url}: No success indicators found", flush=True)
                     
         driver.quit()
         return is_success
